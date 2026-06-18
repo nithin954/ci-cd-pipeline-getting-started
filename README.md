@@ -340,3 +340,15 @@ uv run pytest -v
 | Pytest         | Unit Testing          |
 
 ---
+
+## What is a Runner?
+
+A runner is the machine that executes workflow jobs.
+
+## What is a Job?
+
+A job is a collection of steps executed on a runner.
+
+## What is a Step?
+
+A step is an individual task inside a job.
