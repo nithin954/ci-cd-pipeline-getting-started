@@ -352,3 +352,20 @@ A job is a collection of steps executed on a runner.
 ## What is a Step?
 
 A step is an individual task inside a job.
+
+### Creating rules for branch
+
+ path:- Settings --> Branches --> Add classic branch protection rule
+ 1. we have to specify branch name.
+ 2. Require a pull request before merging.
+ 3. Require status checks to pass before merging. (all pipeline should pass).
+
+ ### Git-hub secrets
+
+path for Secrets:- Settings --> Secrets and variables --> Secrets --> New repository secret
+Name : Secrets
+we can access this secrets.name_of_the_secrets
+
+path for Variables:- Settings --> Secrets and variables --> Variables --> New repository Variables
+Name: Value
+we can access this varibales.name_of_the_variable
