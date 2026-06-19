@@ -9,32 +9,35 @@ This project demonstrates a modern Continuous Integration (CI) pipeline for Pyth
 * uv
 * Ruff
 * Pytest
+* Gitleaks
 
-The goal is to automatically validate code quality and functionality whenever code is pushed to the repository or a pull request is created.
+The goal is to automatically validate code quality, security, and functionality whenever code is pushed to the repository or a pull request is created.
 
 ---
 
-### Why we rae using github pipeline instead of jenskins
-GitHub Actions is tightly integrated with GitHub, requires no server maintenance, and is easy to set up using workflow YAML files stored in the repository. For projects already hosted on GitHub, it provides a simple way to implement CI/CD. Jenkins offers greater customization and is often preferred in large enterprises with existing Jenkins infrastructure or on-premises requirements, but it requires managing servers, plugins, and upgrades.
+# Table of Contents
 
-In jenkins it requires 2 Virtual machines one for jekins master and another for slave to run jobs
-But in github pipeline there two runners:
-1. free/shared runners
-2. self hosted runners
+1. What is CI/CD?
+2. Why GitHub Actions Instead of Jenkins?
+3. GitHub Actions Fundamentals
+4. GitHub Hosted vs Self Hosted Runners
+5. Project Structure
+6. CI Workflow
+7. Workflow Steps
+8. Needs
+9. if Condition (github.event_name)
+10. Gitleaks Security Scanning
+11. PR Validation Pipeline
+12. Push Build Pipeline
+13. Branch Protection Rules
+14. GitHub Secrets and Variables
+15. Timeout Configuration
+16. Running Locally
+17. Migrating to uv
+18. Benefits
+19. Technologies Used
 
-free/ shared runners These are machines provided and managed by GitHub
-self hosted runners These are machines that you own and manage.
-
-### What is the difference between GitHub-hosted and self-hosted runners?
-
-GitHub-hosted runners are temporary virtual machines managed by GitHub. They are easy to use and require no maintenance. Self-hosted runners are machines managed by the organization and registered with GitHub Actions. Self-hosted runners are useful when workflows need access to internal networks, specialized software, custom hardware, or persistent build environments. The trade-off is that the organization is responsible for maintaining and securing the runners.
-
-action github market place:- https://github.com/marketplace?type=actions
-here we can search for action like checkout or setup-python etc...
-
-
-## Gitleaks:
-Gitleaks is a SAST tool for detecting and preventing hardcoded secrets like passwords, API keys, and tokens in git repos. Gitleaks is an easy-to-use, all-in-one solution for detecting secrets, past or present, in your code. Enable Gitleaks-Action in your GitHub workflows to be alerted when secrets are leaked as soon as they happen.
+---
 
 # What is CI/CD?
 
@@ -52,29 +55,31 @@ a CI pipeline performs these checks automatically.
 
 ### Traditional Workflow
 
+```text
 Developer writes code
-↓
+        ↓
 Developer manually runs tests
-↓
+        ↓
 Developer pushes code
-↓
+        ↓
 Issues may reach production
+```
 
 ### CI Workflow
 
+```text
 Developer writes code
-↓
+        ↓
 Pushes code to GitHub
-↓
+        ↓
 GitHub Actions automatically runs
-↓
+        ↓
 Linting executes
-↓
+        ↓
 Tests execute
-↓
+        ↓
 Pass ✅ or Fail ❌
-
-This helps catch issues early.
+```
 
 ---
 
@@ -84,12 +89,356 @@ CD extends CI by automatically preparing or deploying applications after success
 
 Examples:
 
-* Deploy FastAPI application
-* Deploy Docker container
-* Publish Python package
+* Deploy FastAPI applications
+* Deploy Docker containers
+* Publish Python packages
 * Release application artifacts
 
-This repository focuses on the CI portion.
+This repository focuses primarily on the CI portion.
+
+---
+
+# Why GitHub Actions Instead of Jenkins?
+
+GitHub Actions is tightly integrated with GitHub, requires no server maintenance, and is easy to configure using YAML workflow files stored directly in the repository.
+
+Jenkins offers greater customization and is often preferred in large enterprises with existing Jenkins infrastructure or on-premises requirements, but it requires:
+
+* Server installation
+* Plugin management
+* Upgrades
+* Backup management
+* Infrastructure maintenance
+
+### Comparison
+
+| GitHub Actions                | Jenkins                                             |
+| ----------------------------- | --------------------------------------------------- |
+| Managed by GitHub             | Self-managed                                        |
+| No infrastructure maintenance | Requires server management                          |
+| Native GitHub integration     | Plugin-based integration                            |
+| Easy setup                    | More complex setup                                  |
+| Ideal for GitHub projects     | Ideal for highly customized enterprise environments |
+
+---
+
+# GitHub Actions Fundamentals
+
+## What is a Runner?
+
+A runner is the machine that executes workflow jobs.
+
+## What is a Job?
+
+A job is a collection of steps executed on a runner.
+
+## What is a Step?
+
+A step is an individual task executed within a job.
+
+---
+
+# Job Dependencies using needs
+
+The `needs` keyword is used to create dependencies between jobs.
+
+By default, GitHub Actions runs jobs in parallel whenever possible.
+
+Example:
+
+```yaml
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+  test:
+    runs-on: ubuntu-latest
+```
+
+In this case:
+
+```text
+build ──────┐
+            ├── Run in Parallel
+test  ──────┘
+```
+
+Both jobs start at the same time.
+
+---
+
+## Why use needs?
+
+Sometimes a job should only run after another job completes successfully.
+
+Example:
+
+```yaml
+jobs:
+  gitleaks-scan:
+    runs-on: ubuntu-latest
+
+  test:
+    needs: gitleaks-scan
+    runs-on: ubuntu-latest
+```
+
+Flow:
+
+```text
+Gitleaks Scan
+       ↓
+      Test
+```
+
+The test job starts only after the Gitleaks scan succeeds.
+
+If Gitleaks fails:
+
+```text
+Gitleaks Scan ❌
+       ↓
+Test (Skipped)
+```
+
+This prevents unnecessary execution of downstream jobs.
+
+---
+
+## Example from this Project
+
+The pipeline uses Gitleaks as a prerequisite job.
+
+```yaml
+gitleaks-scan:
+  runs-on: ubuntu-latest
+
+build:
+  needs: gitleaks-scan
+
+test:
+  needs: gitleaks-scan
+```
+
+### Pull Request Flow
+
+```text
+pull_request
+      ↓
+gitleaks-scan
+      ↓
+test
+```
+
+### Push to Main Flow
+
+```text
+push
+ ↓
+gitleaks-scan
+ ↓
+build
+```
+
+This ensures:
+
+* Secrets are scanned first
+* Build/Test jobs run only when security checks pass
+* CI resources are not wasted on failed scans
+
+---
+
+## Multiple Dependencies
+
+A job can depend on multiple jobs.
+
+Example:
+
+```yaml
+deploy:
+  needs:
+    - build
+    - test
+```
+
+Flow:
+
+```text
+build ───┐
+         ├── deploy
+test  ───┘
+```
+
+The deploy job starts only when both build and test complete successfully.
+
+---
+
+## Benefits of needs
+
+* Controls execution order
+* Prevents unnecessary job execution
+* Improves pipeline reliability
+* Makes workflows easier to understand
+* Enables secure CI/CD pipelines
+
+---
+
+## Interview Question
+
+### What is `needs` in GitHub Actions?
+
+`needs` is used to define job dependencies. A job configured with `needs` will wait until the specified job or jobs complete successfully before starting. If the dependency fails, the dependent job is skipped. This helps control workflow execution order and prevents unnecessary builds, tests, or deployments.
+
+
+# Conditional Job Execution using if
+
+GitHub Actions provides the `if` condition to control when a job should run.
+
+This project uses:
+
+```yaml
+build:
+  if: github.event_name == 'push'
+```
+
+and
+
+```yaml
+test:
+  if: github.event_name == 'pull_request'
+```
+
+This helps separate the pipeline based on the GitHub event.
+
+---
+
+## Why use if?
+
+Without conditions:
+
+```text
+Pull Request
+      ↓
+Build
+Test
+```
+
+Both jobs would run.
+
+With conditions:
+
+```text
+Pull Request
+      ↓
+Only Test Job Runs
+```
+
+and
+
+```text
+Push to Main
+      ↓
+Only Build Job Runs
+```
+
+This reduces unnecessary executions and speeds up the pipeline.
+
+---
+
+## Pull Request Flow
+
+When a Pull Request is raised against the main branch:
+
+```text
+pull_request
+      ↓
+gitleaks-scan
+      ↓
+test
+  ├── Ruff
+  └── Pytest
+```
+
+Purpose:
+
+* Validate code quality
+* Detect secrets
+* Execute tests
+* Prevent broken code from being merged
+
+No build is performed.
+
+---
+
+## Push to Main Flow
+
+When code is merged into the main branch:
+
+```text
+push to main
+      ↓
+gitleaks-scan
+      ↓
+build
+```
+
+Purpose:
+
+* Security validation
+* Package creation
+* Artifact generation
+* Deployment preparation
+
+Testing has already been completed during the Pull Request stage.
+
+---
+
+## Benefits
+
+* Faster feedback
+* Reduced CI execution time
+* Clear separation of responsibilities
+* Avoids unnecessary builds during PR validation
+* Follows common enterprise CI/CD practices
+
+---
+
+## Interview Question
+
+### Why did you use github.event_name?
+
+I used `github.event_name` to separate validation and build activities. Pull Requests trigger validation jobs such as secret scanning, linting, and testing, while pushes to the main branch trigger build-related activities. This keeps the pipeline efficient and prevents unnecessary builds during code review.
+
+
+# GitHub Hosted vs Self Hosted Runners
+
+## GitHub Hosted Runners
+
+These are machines provided and managed by GitHub.
+
+Benefits:
+
+* No maintenance
+* Auto-updated
+* Easy setup
+* Suitable for most projects
+
+## Self Hosted Runners
+
+These are machines owned and managed by the organization.
+
+Benefits:
+
+* Access to internal networks
+* Custom software
+* Specialized hardware
+* Persistent build environments
+
+Trade-off:
+
+* Maintenance responsibility
+* Security management
+* Infrastructure cost
 
 ---
 
@@ -113,12 +462,6 @@ This repository focuses on the CI portion.
 
 # CI Workflow
 
-The workflow file is located at:
-
-```text
-.github/workflows/ci.yml
-```
-
 The workflow executes automatically when:
 
 ```yaml
@@ -134,8 +477,8 @@ on:
 
 This means:
 
-* Any push to main triggers the pipeline.
-* Any pull request targeting main triggers the pipeline.
+* Any push to main triggers the pipeline
+* Any pull request targeting main triggers the pipeline
 
 ---
 
@@ -147,9 +490,7 @@ This means:
 - uses: actions/checkout@v5
 ```
 
-Downloads the repository contents into the GitHub Actions runner(clonning: git clone the repository).
-
-Without this step the workflow cannot access project files.
+Downloads repository contents into the GitHub runner.
 
 ---
 
@@ -161,27 +502,15 @@ Without this step the workflow cannot access project files.
 
 Installs the required Python version.
 
-Example:
-
-```yaml
-python-version: "3.13"
-```
-
 ---
 
-## 3. Install uv
+## 3. Setup uv
 
 ```yaml
 - uses: astral-sh/setup-uv@v6
 ```
 
 Installs uv.
-
-uv is a modern replacement for:
-
-* pip
-* virtualenv
-* pip-tools
 
 Benefits:
 
@@ -193,120 +522,203 @@ Benefits:
 
 ## 4. Install Dependencies
 
-```yaml
-uv sync --all-extras --dev
+```bash
+uv sync
 ```
 
-Installs:
+Installs dependencies from:
 
-* Application dependencies
-* Development dependencies
-* Testing dependencies
-
-from pyproject.toml.
+* pyproject.toml
+* uv.lock
 
 ---
 
 ## 5. Run Ruff
 
-```yaml
+```bash
 uv run ruff check .
 ```
 
-Ruff performs static code analysis.
-
-Checks for:
+Checks:
 
 * Syntax errors
 * Unused imports
 * Undefined variables
 * Style violations
 
-Example:
-
-```python
-import os
-
-print("Hello")
-```
-
-Ruff reports:
-
-```text
-os imported but unused
-```
-
 ---
 
-## 6. Run Formatting Validation
+## 6. Run Format Check
 
-```yaml
+```bash
 uv run ruff format --check .
 ```
 
-Ensures code formatting follows project standards.
-
-The workflow fails if formatting is incorrect.
+Validates formatting consistency.
 
 ---
 
 ## 7. Run Pytest
 
-```yaml
+```bash
 uv run pytest -v
 ```
 
-Executes all test cases.
+Executes automated tests.
+
+---
+
+# Gitleaks Security Scanning
+
+Gitleaks is a SAST (Static Application Security Testing) tool used to detect and prevent hardcoded secrets such as:
+
+* Passwords
+* API Keys
+* Tokens
+* Cloud Credentials
 
 Example:
 
-```python
-def test_add():
-    assert 2 + 2 == 4
+```bash
+gitleaks detect --source . --exit-code 1
 ```
 
-Expected result:
+If secrets are detected, the workflow fails immediately.
+
+---
+
+# PR Validation Pipeline
+
+The purpose of the PR Validation Pipeline is to verify code quality before code is merged into the main branch.
 
 ```text
-PASSED
+Developer creates feature branch
+        ↓
+Code changes
+        ↓
+Pull Request → main
+        ↓
+GitHub Actions Triggered
+        ↓
+Gitleaks Scan
+        ↓
+Ruff Check
+        ↓
+Pytest Execution
+        ↓
+Pass / Fail
+```
+
+Only validated code can be merged.
+
+---
+
+# Push Build Pipeline
+
+After the PR is approved and merged:
+
+```text
+Merge PR
+      ↓
+Push Event on main
+      ↓
+GitHub Actions Triggered
+      ↓
+Gitleaks Scan
+      ↓
+Install Dependencies
+      ↓
+Build Package
+      ↓
+Upload Artifact
+```
+
+This separates validation from build activities.
+
+---
+
+# Branch Protection Rules
+
+Location:
+
+```text
+Settings
+    ↓
+Branches
+    ↓
+Add Classic Branch Protection Rule
+```
+
+Recommended settings:
+
+* Require a pull request before merging
+* Require status checks to pass before merging
+* Require review approval
+* Prevent force pushes
+
+---
+
+# GitHub Secrets and Variables
+
+## Repository Secrets
+
+Location:
+
+```text
+Settings
+    ↓
+Secrets and Variables
+    ↓
+Actions
+    ↓
+Secrets
+```
+
+Usage:
+
+```yaml
+${{ secrets.SECRET_NAME }}
 ```
 
 ---
 
-# CI Pipeline Flow
+## Repository Variables
+
+Location:
 
 ```text
-Push Code
+Settings
     ↓
-GitHub Actions Triggered
+Secrets and Variables
     ↓
-Checkout Repository
+Actions
     ↓
-Setup Python
-    ↓
-Install uv
-    ↓
-Install Dependencies
-    ↓
-Run Ruff
-    ↓
-Run Format Check
-    ↓
-Run Pytest
-    ↓
-Pass ✅ / Fail ❌
+Variables
 ```
+
+Usage:
+
+```yaml
+${{ vars.VARIABLE_NAME }}
+```
+
+---
+
+# Timeout Configuration
+
+Timeout prevents jobs from running indefinitely.
+
+Example:
+
+```yaml
+timeout-minutes: 15
+```
+
+If a job exceeds the specified duration, GitHub automatically terminates it.
 
 ---
 
 # Running Locally
-
-## Clone Repository
-
-```bash
-git clone <repository-url>
-cd <repository-name>
-```
 
 ## Install uv
 
@@ -340,13 +752,41 @@ uv run pytest -v
 
 ---
 
-# Benefits of this Pipeline
+# Migrating to uv
+
+## Before
+
+```bash
+pip install -r requirements.txt
+flake8 .
+pytest
+```
+
+## After
+
+```bash
+uv sync
+uv run ruff check .
+uv run pytest
+```
+
+Benefits:
+
+* Faster installs
+* Lock file support
+* Better dependency management
+* Modern Python workflow
+
+---
+
+# Benefits
 
 * Automated quality checks
+* Security scanning
 * Faster feedback
 * Consistent coding standards
 * Early bug detection
-* Improved code reliability
+* Improved reliability
 * Industry-standard CI workflow
 
 ---
@@ -360,463 +800,4 @@ uv run pytest -v
 | uv             | Dependency Management |
 | Ruff           | Linting & Formatting  |
 | Pytest         | Unit Testing          |
-
----
-
-## What is a Runner?
-
-A runner is the machine that executes workflow jobs.
-
-## What is a Job?
-
-A job is a collection of steps executed on a runner.
-
-## What is a Step?
-
-A step is an individual task inside a job.
-
-### Creating rules for branch
-
- path:- Settings --> Branches --> Add classic branch protection rule
- 1. we have to specify branch name.
- 2. Require a pull request before merging.
- 3. Require status checks to pass before merging. (all pipeline should pass).
-
- ### Git-hub secrets
-
-path for Secrets:- Settings --> Secrets and variables --> Secrets --> New repository secret
-Name : Secrets
-we can access this secrets.name_of_the_secrets
-
-path for Variables:- Settings --> Secrets and variables --> Variables --> New repository Variables
-Name: Value
-we can access this varibales.name_of_the_variable
-
-### timeout
-
-Adding timeout prevents a job from running forever if something gets stuck.
-
-
-Added if: github.event_name condition it will helps to seprate pipeline will run on push and pull_request.
-
-### Flow on Pull Request
-pull_request
-     ↓
-gitleaks-scan
-     ↓
-test
-  ├─ flake8
-  └─ pytest
-
-
-### Flow on Push to Main
-push to main
-      ↓
-gitleaks-scan
-      ↓
-build
-
-### PR Validation Pipeline
-
-The purpose of the PR validation pipeline is to verify code quality before code is merged into main.
-
-Flow:
-
-Developer creates feature branch
-        ↓
-Code changes
-        ↓
-Pull Request → main
-        ↓
-GitHub Actions Triggered
-        ↓
-Gitleaks Scan
-        ↓
-Flake8 Lint Check
-        ↓
-Pytest Execution
-        ↓
-Pass/Fail
-
-
-### Push Build Pipeline
-
-After the PR is approved and merged:
-
-Merge PR
-      ↓
-Push Event on main
-      ↓
-GitHub Actions Triggered
-      ↓
-Gitleaks Scan
-      ↓
-Install Dependencies
-      ↓
-Build Package
-      ↓
-Upload Artifact
-
-I separated the pipeline into two stages. The Pull Request pipeline performs validation activities such as Gitleaks secret scanning, Flake8 linting, and Pytest execution. This ensures that only quality code can be merged into the main branch. Once the Pull Request is approved and merged, a push event on the main branch triggers the build pipeline, which performs security scanning again, installs dependencies, builds the package using Python build tools, and prepares artifacts for deployment. This separation reduces unnecessary builds and provides faster feedback to developers.
-
-### Demo Repository Structure
-```sample-python-project/
-│
-├── app/
-│   ├── calculator.py
-│   └── __init__.py
-│
-├── tests/
-│   └── test_calculator.py
-│
-├── requirements.txt
-├── pyproject.toml
-│
-└── .github/
-    └── workflows/
-        ├── pr-validation.yml
-        └── build.yml
-```
-
-# Migrating a Python Project to uv
-
-## Overview
-
-This document explains how to migrate a traditional Python project that uses:
-
-* pip
-* requirements.txt
-* flake8
-
-to a modern Python development workflow using:
-
-* uv
-* pyproject.toml
-* uv.lock
-* ruff
-* pytest
-
-The goal is to improve dependency management, installation speed, reproducibility, and CI/CD workflows.
-
----
-
-# Why Migrate to uv?
-
-Traditional Python projects often use:
-
-```text
-requirements.txt
-pip install -r requirements.txt
-```
-
-While this approach works, it has limitations:
-
-* Slower dependency resolution
-* Manual virtual environment management
-* No dependency lock file
-* Multiple tools required
-
-uv provides:
-
-* Fast dependency installation
-* Dependency locking
-* Virtual environment management
-* Modern Python project structure
-
----
-
-# Existing Project Structure
-
-Before migration:
-
-```text
-project/
-│
-├── app/
-├── tests/
-├── requirements.txt
-├── README.md
-└── .github/
-```
-
-Example requirements.txt:
-
-```text
-pytest
-requests
-flake8
-```
-
----
-
-# Step 1: Install uv
-
-Install uv using pip:
-
-```bash
-pip install uv
-```
-
-Verify installation:
-
-```bash
-uv --version
-```
-
----
-
-# Step 2: Initialize pyproject.toml
-
-Create a pyproject.toml file:
-
-```bash
-uv init --bare
-```
-
-This creates:
-
-```text
-pyproject.toml
-```
-
-Example:
-
-```toml
-[project]
-name = "sample-project"
-version = "0.1.0"
-requires-python = ">=3.10"
-dependencies = []
-```
-
----
-
-# Step 3: Add Dependencies
-
-Instead of editing requirements.txt manually:
-
-```bash
-uv add requests
-uv add pytest
-uv add --dev ruff
-```
-
-Result:
-
-```toml
-[project]
-dependencies = [
-    "requests",
-    "pytest"
-]
-
-[dependency-groups]
-dev = [
-    "ruff"
-]
-```
-
----
-
-# Step 4: Create Lock File
-
-Generate a lock file:
-
-```bash
-uv sync
-```
-
-This creates:
-
-```text
-uv.lock
-```
-
-The lock file ensures all developers use the same package versions.
-
----
-
-# Step 5: Remove requirements.txt
-
-After confirming dependencies are present in pyproject.toml:
-
-```text
-requirements.txt
-```
-
-can be removed.
-
-Dependency management is now handled through:
-
-```text
-pyproject.toml
-uv.lock
-```
-
----
-
-# Step 6: Replace Flake8 with Ruff
-
-Old command:
-
-```bash
-flake8 .
-```
-
-New command:
-
-```bash
-uv run ruff check .
-```
-
-Check formatting:
-
-```bash
-uv run ruff format --check .
-```
-
-Automatically format code:
-
-```bash
-uv run ruff format .
-```
-
----
-
-# Step 7: Run Tests Using uv
-
-Old command:
-
-```bash
-pytest
-```
-
-New command:
-
-```bash
-uv run pytest
-```
-
-Verbose output:
-
-```bash
-uv run pytest -v
-```
-
----
-
-# Running the Project
-
-Install dependencies:
-
-```bash
-uv sync
-```
-
-Run Ruff:
-
-```bash
-uv run ruff check .
-```
-
-Run formatting checks:
-
-```bash
-uv run ruff format --check .
-```
-
-Run tests:
-
-```bash
-uv run pytest -v
-```
-
----
-
-# GitHub Actions Changes
-
-## Before
-
-```yaml
-pip install flake8 pytest
-
-if [ -f requirements.txt ]; then
-  pip install -r requirements.txt
-fi
-
-flake8 .
-pytest
-```
-
-## After
-
-```yaml
-- uses: astral-sh/setup-uv@v6
-
-- name: Install Dependencies
-  run: uv sync
-
-- name: Ruff Check
-  run: uv run ruff check .
-
-- name: Format Check
-  run: uv run ruff format --check .
-
-- name: Run Tests
-  run: uv run pytest -v
-```
-
----
-
-# Updated Project Structure
-
-```text
-project/
-│
-├── app/
-├── tests/
-├── pyproject.toml
-├── uv.lock
-├── README.md
-└── .github/
-    └── workflows/
-```
-
----
-
-# Benefits of uv
-
-| Feature                        | pip           | uv        |
-| ------------------------------ | ------------- | --------- |
-| Dependency Management          | Yes           | Yes       |
-| Lock File Support              | Limited       | Yes       |
-| Virtual Environment Management | Separate Tool | Built In  |
-| Speed                          | Moderate      | Very Fast |
-| Modern Workflow                | Partial       | Yes       |
-
----
-
-# CI/CD Benefits
-
-Using uv in CI/CD provides:
-
-* Faster workflow execution
-* Consistent dependency versions
-* Reproducible builds
-* Simplified setup steps
-* Modern Python project standards
-
----
-
-# Conclusion
-
-The migration from pip and requirements.txt to uv modernizes Python project management by introducing:
-
-* pyproject.toml
-* uv.lock
-* Ruff for linting
-* Faster dependency installation
-* Better CI/CD integration
-
-This approach aligns with modern Python development practices and simplifies dependency management across local development and automated pipelines.
-
+| Gitleaks       | Secret Scanning       |
