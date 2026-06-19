@@ -460,7 +460,7 @@ Upload Artifact
 I separated the pipeline into two stages. The Pull Request pipeline performs validation activities such as Gitleaks secret scanning, Flake8 linting, and Pytest execution. This ensures that only quality code can be merged into the main branch. Once the Pull Request is approved and merged, a push event on the main branch triggers the build pipeline, which performs security scanning again, installs dependencies, builds the package using Python build tools, and prepares artifacts for deployment. This separation reduces unnecessary builds and provides faster feedback to developers.
 
 ### Demo Repository Structure
-sample-python-project/
+```sample-python-project/
 │
 ├── app/
 │   ├── calculator.py
@@ -476,3 +476,347 @@ sample-python-project/
     └── workflows/
         ├── pr-validation.yml
         └── build.yml
+```
+
+# Migrating a Python Project to uv
+
+## Overview
+
+This document explains how to migrate a traditional Python project that uses:
+
+* pip
+* requirements.txt
+* flake8
+
+to a modern Python development workflow using:
+
+* uv
+* pyproject.toml
+* uv.lock
+* ruff
+* pytest
+
+The goal is to improve dependency management, installation speed, reproducibility, and CI/CD workflows.
+
+---
+
+# Why Migrate to uv?
+
+Traditional Python projects often use:
+
+```text
+requirements.txt
+pip install -r requirements.txt
+```
+
+While this approach works, it has limitations:
+
+* Slower dependency resolution
+* Manual virtual environment management
+* No dependency lock file
+* Multiple tools required
+
+uv provides:
+
+* Fast dependency installation
+* Dependency locking
+* Virtual environment management
+* Modern Python project structure
+
+---
+
+# Existing Project Structure
+
+Before migration:
+
+```text
+project/
+│
+├── app/
+├── tests/
+├── requirements.txt
+├── README.md
+└── .github/
+```
+
+Example requirements.txt:
+
+```text
+pytest
+requests
+flake8
+```
+
+---
+
+# Step 1: Install uv
+
+Install uv using pip:
+
+```bash
+pip install uv
+```
+
+Verify installation:
+
+```bash
+uv --version
+```
+
+---
+
+# Step 2: Initialize pyproject.toml
+
+Create a pyproject.toml file:
+
+```bash
+uv init --bare
+```
+
+This creates:
+
+```text
+pyproject.toml
+```
+
+Example:
+
+```toml
+[project]
+name = "sample-project"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = []
+```
+
+---
+
+# Step 3: Add Dependencies
+
+Instead of editing requirements.txt manually:
+
+```bash
+uv add requests
+uv add pytest
+uv add --dev ruff
+```
+
+Result:
+
+```toml
+[project]
+dependencies = [
+    "requests",
+    "pytest"
+]
+
+[dependency-groups]
+dev = [
+    "ruff"
+]
+```
+
+---
+
+# Step 4: Create Lock File
+
+Generate a lock file:
+
+```bash
+uv sync
+```
+
+This creates:
+
+```text
+uv.lock
+```
+
+The lock file ensures all developers use the same package versions.
+
+---
+
+# Step 5: Remove requirements.txt
+
+After confirming dependencies are present in pyproject.toml:
+
+```text
+requirements.txt
+```
+
+can be removed.
+
+Dependency management is now handled through:
+
+```text
+pyproject.toml
+uv.lock
+```
+
+---
+
+# Step 6: Replace Flake8 with Ruff
+
+Old command:
+
+```bash
+flake8 .
+```
+
+New command:
+
+```bash
+uv run ruff check .
+```
+
+Check formatting:
+
+```bash
+uv run ruff format --check .
+```
+
+Automatically format code:
+
+```bash
+uv run ruff format .
+```
+
+---
+
+# Step 7: Run Tests Using uv
+
+Old command:
+
+```bash
+pytest
+```
+
+New command:
+
+```bash
+uv run pytest
+```
+
+Verbose output:
+
+```bash
+uv run pytest -v
+```
+
+---
+
+# Running the Project
+
+Install dependencies:
+
+```bash
+uv sync
+```
+
+Run Ruff:
+
+```bash
+uv run ruff check .
+```
+
+Run formatting checks:
+
+```bash
+uv run ruff format --check .
+```
+
+Run tests:
+
+```bash
+uv run pytest -v
+```
+
+---
+
+# GitHub Actions Changes
+
+## Before
+
+```yaml
+pip install flake8 pytest
+
+if [ -f requirements.txt ]; then
+  pip install -r requirements.txt
+fi
+
+flake8 .
+pytest
+```
+
+## After
+
+```yaml
+- uses: astral-sh/setup-uv@v6
+
+- name: Install Dependencies
+  run: uv sync
+
+- name: Ruff Check
+  run: uv run ruff check .
+
+- name: Format Check
+  run: uv run ruff format --check .
+
+- name: Run Tests
+  run: uv run pytest -v
+```
+
+---
+
+# Updated Project Structure
+
+```text
+project/
+│
+├── app/
+├── tests/
+├── pyproject.toml
+├── uv.lock
+├── README.md
+└── .github/
+    └── workflows/
+```
+
+---
+
+# Benefits of uv
+
+| Feature                        | pip           | uv        |
+| ------------------------------ | ------------- | --------- |
+| Dependency Management          | Yes           | Yes       |
+| Lock File Support              | Limited       | Yes       |
+| Virtual Environment Management | Separate Tool | Built In  |
+| Speed                          | Moderate      | Very Fast |
+| Modern Workflow                | Partial       | Yes       |
+
+---
+
+# CI/CD Benefits
+
+Using uv in CI/CD provides:
+
+* Faster workflow execution
+* Consistent dependency versions
+* Reproducible builds
+* Simplified setup steps
+* Modern Python project standards
+
+---
+
+# Conclusion
+
+The migration from pip and requirements.txt to uv modernizes Python project management by introducing:
+
+* pyproject.toml
+* uv.lock
+* Ruff for linting
+* Faster dependency installation
+* Better CI/CD integration
+
+This approach aligns with modern Python development practices and simplifies dependency management across local development and automated pipelines.
+
